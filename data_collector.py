@@ -61,8 +61,9 @@ class DataCollector:
             clean_df['FTHG'] == clean_df['FTAG'],
         ]
 
-        choices = ['H','A','H']
+        choices = ['H','A','D']
         clean_df['Result'] = np.select(conditions, choices, default='D')
+        result_counts_before = clean_df['Result'].value_counts()
 
 #calculate the market probabilities and remove the vig
         total_probs = (1/clean_df['B365H']) + (1/clean_df['B365D']) + (1/clean_df['B365A'])
@@ -83,7 +84,6 @@ class DataCollector:
         clean_df['Total_Shots'] = clean_df['HS'] + clean_df['AS']
         clean_df['Shot_Ratio'] = clean_df['HS'] / (clean_df['HS'] + clean_df['AS'])
 
-        print(f"✅ Cleaning complete! {len(clean_df)} matches with COMPLETE data ready")
         self.clean_data = clean_df
         self.clean_data.to_csv('epl_clean_data.csv', index=False)
 
