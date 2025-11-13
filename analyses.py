@@ -177,7 +177,6 @@ class DataAnalyses:
     def find_value_bets(self, model, X, clean_data, threshold=0.03):
         print(f" Finding value bets")
 
-        # Get model probabilities
         model_proba = model.predict_proba(X)
 
         value_bets = []
