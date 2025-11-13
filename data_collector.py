@@ -6,9 +6,10 @@ import numpy as np
 
 
 class DataCollector:
-    def __init__(self):
+    def __init__(self,team_strength_calculator=None):
         self.data = None
         self.clean_data = None
+        self.team_strength_calculator = team_strength_calculator
 
 
 
@@ -54,6 +55,7 @@ class DataCollector:
 
         clean_df=clean_df[columns]
         clean_df = clean_df.dropna(subset=['B365H', 'B365D', 'B365A','FTHG', 'FTAG','HS', 'AS'])
+        clean_df['Date'] = pd.to_datetime(clean_df['Date'], format='%d/%m/%Y', errors='coerce')
 
         conditions = [
             clean_df['FTHG'] > clean_df['FTAG'],
@@ -83,6 +85,13 @@ class DataCollector:
         clean_df['Goal_Difference'] = clean_df['FTHG'] - clean_df['FTAG']
         clean_df['Total_Shots'] = clean_df['HS'] + clean_df['AS']
         clean_df['Shot_Ratio'] = clean_df['HS'] / (clean_df['HS'] + clean_df['AS'])
+
+        if self.team_strength_calculator:
+
+            clean_df = self.team_strength_calculator.create_team_strength_features(clean_df,window = 10)
+            print(f"Added team strength features. Total columns: {len(clean_df.columns)}")
+        else:
+            print("No team strength calculator provided - using basic features only")
 
         self.clean_data = clean_df
         self.clean_data.to_csv('epl_clean_data.csv', index=False)

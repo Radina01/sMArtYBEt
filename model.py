@@ -9,28 +9,10 @@ from sklearn.preprocessing import LabelEncoder
 
 
 class ModelTrainer:
-    def __init__(self):
+    def __init__(self,label_encoder):
         self.models = {}
         self.results = {}
-        self.label_encoder = LabelEncoder()
-
-    def prepare_features(self, clean_data):
-        feature_columns = sorted(['Market_Prob_Away', 'Market_Prob_Draw', 'Market_Prob_Home'])
-            # 'HS', 'AS', 'HST', 'AST', 'HC', 'AC', 'HF', 'AF',
-            # 'HY', 'AY', 'HR', 'AR',
-            # 'Total_Shots', 'Shot_Ratio']
-
-       # forbidden_features = ['FTHG', 'FTAG', 'HTHG', 'HTAG', 'Total_Goals', 'Goal_Difference']
-
-        x = clean_data[feature_columns]
-        y = clean_data['Result']
-
-        y_encoded = self.label_encoder.fit_transform(y)
-# Verify encoding works
-        print(f"Features: {len(feature_columns)} columns")
-        print(f"Label encoding: {list(zip(self.label_encoder.classes_, range(len(self.label_encoder.classes_))))}")
-
-        return x,y_encoded,feature_columns
+        self.label_encoder = label_encoder
 
     def create_baseline_model(self, X, y_encoded):
         baseline_prediction = X[['Market_Prob_Away', 'Market_Prob_Draw', 'Market_Prob_Home']].values
@@ -92,89 +74,6 @@ class ModelTrainer:
                 return best_model[0]
         return None
 
-#Find potential value bets where model disagrees with market
-    def find_value_bets(self, model, X, clean_data, threshold=0.03):
-
-        model_proba = model.predict_proba(X)
-
-        market_home = clean_data['Market_Prob_Home'].values
-        market_draw = clean_data['Market_Prob_Draw'].values
-        market_away = clean_data['Market_Prob_Away'].values
-
-        # # DEBUG: Check if we need to normalize
-        # market_sums = market_home + market_draw + market_away
-        # print(f" Market probability sums: min={market_sums.min():.3f}, max={market_sums.max():.3f}")
-        #
-        # # If market probabilities don't sum to 1, we have a problem
-        # if abs(market_sums.mean() - 1.0) > 0.01:
-        #     print("Market probabilities don't sum to 1 - this explains the huge edges!")
-        #
-        # # DEBUG: Check for impossible probabilities
-        # overconfident_predictions = (model_proba > 0.90).sum()
-        # if overconfident_predictions > 0:
-        #     print(f"{overconfident_predictions} overconfident predictions (>90%)")
-
-        model_df = pd.DataFrame(model_proba, columns=self.label_encoder.classes_,index= X.index)
-
-        value_bets=[]
-
-        for index in X.index:
-            model_home = model_df.loc[index,'H'] if 'H' in model_df.columns else 0
-            model_draw = model_df.loc[index,'D'] if 'D' in model_df.columns else 0
-            model_away = model_df.loc[index,'A'] if 'A' in model_df.columns else 0
-
-            market_home = clean_data.loc[index,'Market_Prob_Home']
-            market_draw = clean_data.loc[index,'Market_Prob_Draw']
-            market_away = clean_data.loc[index,'Market_Prob_Away']
-
-            home_edge = model_home - market_home
-            away_edge = model_away - market_away
-            draw_edge = model_draw - market_draw
-
-            if home_edge > threshold:
-                value_bets.append({
-                    'game_index': index,
-                    'home_team':clean_data.loc[index,'HomeTeam'],
-                    'away_team':clean_data.loc[index,'AwayTeam'],
-                    'bet_type':'HOME',
-                    'model_prob': model_home,
-                    'market_prob': market_home,
-                    'edge': home_edge,
-                    'odds': clean_data.loc[index,'B365H'],
-                })
-            if away_edge > threshold:
-                value_bets.append({
-                    'game_index': index,
-                    'home_team':clean_data.loc[index,'HomeTeam'],
-                    'away_team':clean_data.loc[index,'AwayTeam'],
-                    'bet_type':'AWAY',
-                    'model_prob': model_away,
-                    'market_prob': market_away,
-                    'edge': away_edge,
-                    'odds': clean_data.loc[index,'B365A'],
-                })
-
-            if draw_edge > threshold:
-                value_bets.append({
-                    'game_index': index,
-                    'home_team':clean_data.loc[index,'HomeTeam'],
-                    'away_team':clean_data.loc[index,'AwayTeam'],
-                    'bet_type':'DRAW',
-                    'model_prob': model_draw,
-                    'market_prob': market_draw,
-                    'edge': draw_edge,
-                    'odds': clean_data.loc[index,'B365D'],
-                })
-
-        value_df = pd.DataFrame(value_bets)
-        if len(value_df)>0:
-             print(f"Found {len(value_df)} potential value bets!")
-             print("\n Top 10 Value Bets:")
-             print(value_df[['home_team', 'away_team', 'bet_type', 'edge', 'odds']].head(10))
-        else:
-             print(" No value bets found with current threshold")
-        return value_df
-
 # Check if any features strongly correlate with the result
     def check_for_leakage(self, clean_data, feature_columns):
             print("\n" + "=" * 60)
@@ -189,6 +88,56 @@ class ModelTrainer:
                     elif abs(correlation) > 0.1:
                         print(f"Moderate correlation: {feature} - Result: {correlation:.3f}")
 
+    def  predict_match(self,model,home_team,away_team,home_odds,away_odds,draw_odds,home_strength,away_strength,feature_names):
+        total_prob=(1/home_odds)+(1/away_odds)+(1/draw_odds)
+        market_prob_home = (1/home_odds)/total_prob
+        market_prob_draw = (1/draw_odds)/total_prob
+        market_prob_away = (1/away_odds)/total_prob
+
+
+        all_features = {
+            'Market_Prob_Away': market_prob_away,
+            'Market_Prob_Draw': market_prob_draw,
+            'Market_Prob_Home': market_prob_home,
+            'Home_Avg_Goals_For': home_strength['Avg_Goals_For'],
+            'Home_Avg_Goals_Against': home_strength['Avg_Goals_Against'],
+            'Home_Avg_Points': home_strength['Avg_Points'],
+            'Home_Form': home_strength['Form'],
+            'Away_Avg_Goals_For': away_strength['Avg_Goals_For'],
+            'Away_Avg_Goals_Against': away_strength['Avg_Goals_Against'],
+            'Away_Avg_Points': away_strength['Avg_Points'],
+            'Away_Form': away_strength['Form'],
+
+            'Home_Attack_Strength' : home_strength['Avg_Goals_For'] / (away_strength['Avg_Goals_Against'] + 0.1),
+
+            'Away_Attack_Strength' : away_strength['Avg_Goals_For'] / (home_strength['Avg_Goals_Against'] + 0.1),
+
+            'Strength_Difference' : home_strength['Avg_Points'] - away_strength['Avg_Points']
+        }
+        feature_values = []
+        for feature in feature_names:
+            if feature in all_features:
+                feature_values.append(all_features[feature])
+            else:
+                feature_values.append(1.0)
+
+        prediction_array = np.array([feature_values])
+
+        probabilities = model.predict_proba(prediction_array)[0]
+        predicted_class = model.predict(prediction_array)[0]
+        predicted_label = self.label_encoder.inverse_transform([predicted_class])[0]
+
+        return {
+            'match': f"{home_team} vs {away_team}",
+            'predicted_result': predicted_label,
+            'probabilities': {
+                'Home': probabilities[2],
+                'Draw': probabilities[1],
+                'Away': probabilities[0]
+            },
+            'confidence': np.max(probabilities),
+            'market_odds': f"H:{home_odds:.2f} D:{draw_odds:.2f} A:{away_odds:.2f}"
+        }
     # def analyze_model_insights(self, model, feature_names, clean_data):
     #     if hasattr(model, 'coef_'):
     #
