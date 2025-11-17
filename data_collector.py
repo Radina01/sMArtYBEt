@@ -6,10 +6,11 @@ import numpy as np
 
 
 class DataCollector:
-    def __init__(self,team_strength_calculator=None):
+    def __init__(self,team_strength_calculator=None,quick_win = None):
         self.data = None
         self.clean_data = None
         self.team_strength_calculator = team_strength_calculator
+        self.quick_win = quick_win
 
 
 
@@ -41,12 +42,92 @@ class DataCollector:
         self.data = pd.concat(all_data, ignore_index=True)
         self.data.to_csv('epl_data.csv', index=False)
         return self.data
+
+    def _parse_dates_robustly(self, df):
+
+        date_series = df['Date'].copy()
+
+        # Method 1: Try standard format (dd/mm/yy or dd/mm/yyyy)
+        parsed_dates = pd.to_datetime(date_series, format='%d/%m/%Y', errors='coerce')
+
+        # Method 2: Try alternative format (dd/mm/yy)
+        if parsed_dates.isna().any():
+            mask = parsed_dates.isna()
+            alternative_parsed = pd.to_datetime(date_series[mask], format='%d/%m/%y', errors='coerce')
+            parsed_dates[mask] = alternative_parsed
+
+        # Method 3: Try any format that pandas can infer
+        if parsed_dates.isna().any():
+            mask = parsed_dates.isna()
+            inferred_parsed = pd.to_datetime(date_series[mask], infer_datetime_format=True, errors='coerce')
+            parsed_dates[mask] = inferred_parsed
+
+        # Method 4: Manual parsing for common patterns
+        if parsed_dates.isna().any():
+            mask = parsed_dates.isna()
+            remaining_dates = date_series[mask]
+
+            def manual_parse(date_str):
+                if pd.isna(date_str):
+                    return pd.NaT
+
+                # Try to handle various separators and formats
+                date_str = str(date_str).strip()
+
+                # Common patterns in football-data.co.uk
+                patterns = [
+                    r'(\d{1,2})/(\d{1,2})/(\d{4})',  # dd/mm/yyyy
+                    r'(\d{1,2})/(\d{1,2})/(\d{2})',  # dd/mm/yy
+                    r'(\d{4})-(\d{1,2})-(\d{1,2})',  # yyyy-mm-dd
+                ]
+
+                for pattern in patterns:
+                    match = re.search(pattern, date_str)
+                    if match:
+                        groups = match.groups()
+                        if len(groups) == 3:
+                            try:
+                                if len(groups[2]) == 4:  # yyyy
+                                    return pd.Timestamp(int(groups[2]), int(groups[1]), int(groups[0]))
+                                else:  # yy
+                                    year = int(groups[2])
+                                    year = year + 2000 if year < 100 else year
+                                    return pd.Timestamp(year, int(groups[1]), int(groups[0]))
+                            except (ValueError, TypeError):
+                                continue
+
+                return pd.NaT
+
+            manual_parsed = remaining_dates.apply(manual_parse)
+            parsed_dates[mask] = manual_parsed
+
+        failed_count = parsed_dates.isna().sum()
+        success_count = len(parsed_dates) - failed_count
+
+        print(f" Date parsing results:")
+        print(f"   Successfully parsed: {success_count} dates")
+        print(f"   Failed to parse: {failed_count} dates")
+
+        if failed_count > 0:
+            print(f"   Sample failed dates: {date_series[parsed_dates.isna()].head(5).tolist()}")
+
+        if success_count > 0:
+            valid_dates = parsed_dates[parsed_dates.notna()]
+            print(
+                f"   Date range: {valid_dates.min().strftime('%Y-%m-%d')} to {valid_dates.max().strftime('%Y-%m-%d')}")
+
+        return parsed_dates
+
     def clean_dataset(self):
         if os.path.exists('epl_clean_data.csv'):
             self.clean_data = pd.read_csv('epl_clean_data.csv')
             print("Cleaned data file exists")
+            self.clean_data['Date'] = pd.to_datetime(self.clean_data['Date'])
             return self.clean_data
         clean_df = self.data.copy()
+
+        # Check for different date formats by season
+
         columns = [
             'Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG',
             'B365H', 'B365D', 'B365A', 'HS', 'AS', 'HST', 'AST',
@@ -55,7 +136,8 @@ class DataCollector:
 
         clean_df=clean_df[columns]
         clean_df = clean_df.dropna(subset=['B365H', 'B365D', 'B365A','FTHG', 'FTAG','HS', 'AS'])
-        clean_df['Date'] = pd.to_datetime(clean_df['Date'], format='%d/%m/%Y', errors='coerce')
+
+        clean_df['Date'] = self._parse_dates_robustly(clean_df)
 
         conditions = [
             clean_df['FTHG'] > clean_df['FTAG'],
@@ -92,6 +174,12 @@ class DataCollector:
             print(f"Added team strength features. Total columns: {len(clean_df.columns)}")
         else:
             print("No team strength calculator provided - using basic features only")
+
+        if self.quick_win:
+            clean_df = self.quick_win.create_quick_win_features(clean_df)
+            print(f"Added quick win features. Total columns: {len(clean_df.columns)}")
+        else:
+            print("No quick win provided - using basic features only")
 
         self.clean_data = clean_df
         self.clean_data.to_csv('epl_clean_data.csv', index=False)

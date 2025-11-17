@@ -174,10 +174,10 @@ class DataAnalyses:
 
 # Find potential value bets where model disagrees with market
 
-    def find_value_bets(self, model, X, clean_data, threshold=0.03):
+    def find_value_bets(self, model_wrapper, X, clean_data, threshold=0.01):
         print(f" Finding value bets")
 
-        model_proba = model.predict_proba(X)
+        model_proba = model_wrapper.predict_proba(X)
 
         value_bets = []
 
@@ -196,32 +196,36 @@ class DataAnalyses:
                 'H': model_proba[i][2]
             }
 
-            if i < 3:
-                print(f"\nGame {i} - {clean_data.loc[index, 'HomeTeam']} vs {clean_data.loc[index, 'AwayTeam']}:")
-                print(f"  Actual: {actual_result}")
-                print(
-                    f"  Model:  A={model_probs_dict['A']:.3f}, D={model_probs_dict['D']:.3f}, H={model_probs_dict['H']:.3f}")
-                print(f"  Market: A={market_probs['A']:.3f}, D={market_probs['D']:.3f}, H={market_probs['H']:.3f}")
-
+            best_bet = None
+            best_edge = -1
             for outcome in ['H', 'D', 'A']:
                 edge = model_probs_dict[outcome] - market_probs[outcome]
 
-                if edge > threshold:
-                    value_bets.append({
-                        'game_index': index,
-                        'home_team': clean_data.loc[index, 'HomeTeam'],
-                        'away_team': clean_data.loc[index, 'AwayTeam'],
-                        'bet_type': outcome,
-                        'model_prob': model_probs_dict[outcome],
-                        'market_prob': market_probs[outcome],
-                        'edge': edge,
-                        'odds': clean_data.loc[index, f'B365{outcome}'],
-                        'actual_result': actual_result,
-                        'correct': outcome == actual_result  # For immediate validation
-                    })
+                if edge > threshold and edge > best_edge:
+                    best_edge = edge
+                    best_bet = outcome
 
-                    if i < 3:
-                        print(f"    VALUE BET: {outcome} (Edge: {edge:.3f})")
+            if best_bet is not None:
+                value_bets.append({
+                    'game_index': index,
+                    'home_team': clean_data.loc[index, 'HomeTeam'],
+                    'away_team': clean_data.loc[index, 'AwayTeam'],
+                    'bet_type': best_bet,
+                    'model_prob': model_probs_dict[best_bet],
+                    'market_prob': market_probs[best_bet],
+                    'edge': best_edge,
+                    'odds': clean_data.loc[index, f'B365{best_bet}'],
+                    'actual_result': actual_result,
+                    'correct': best_bet == actual_result  # For immediate validation
+                })
+
+                if i < 3:
+                    print(
+                        f"\nGame {i} - {clean_data.loc[index, 'HomeTeam']} vs {clean_data.loc[index, 'AwayTeam']}:")
+                    print(f"  Actual: {actual_result}")
+                    print(f"  Model:  A={model_probs_dict['A']:.3f}, D={model_probs_dict['D']:.3f}, H={model_probs_dict['H']:.3f}")
+                    print(f"  Market: A={market_probs['A']:.3f}, D={market_probs['D']:.3f}, H={market_probs['H']:.3f}")
+                    print(f"    VALUE BET: {outcome} (Edge: {edge:.3f})")
 
         value_df = pd.DataFrame(value_bets)
 
@@ -244,34 +248,32 @@ class DataAnalyses:
 
         return value_df
 
-    def validate_value_bet_quality(self, value_bets, clean_data):
+    def calculate_roi(self, value_df):
         print(f"\n  VALUE BET VALIDATION")
         print("=" * 40)
 
-        if value_bets.empty:
-            print("No value bets to validate")
-            return 0
-        profitable_bets = []
+        if value_df.empty:
+            return {'roi': 0.0, 'hit_rate': 0.0, 'total_bets': 0}
 
-        for bet in value_bets.to_dict('records'):
-            game_idx = bet['game_index']
-            actual_result = clean_data.loc[game_idx, 'Result']
+        returns = []
+        wins = 0
 
-            # Check if bet would have won
-            if bet['bet_type'] == actual_result:
-                profitable_bets.append(bet)
+        for _, row in value_df.iterrows():
+            odds = row['odds']
+            if pd.isna(odds) or odds <= 1:
+                returns.append(-1.0)
+                continue
+            if row['correct']:
+                returns.append(odds - 1.0)  # win profit
+                wins += 1
+            else:
+                returns.append(-1.0)
 
-        hit_rate = len(profitable_bets) / len(value_bets)
-
-        print(f"Value bets that would have won: {len(profitable_bets)}/{len(value_bets)}")
-        print(f"Hit rate: {hit_rate:.1%}")
-
-        if profitable_bets:
-            avg_odds = value_bets['odds'].mean()
-            expected_roi = (hit_rate * avg_odds) - 1
-            print(f"Expected ROI: {expected_roi:+.1%}")
-
-        return hit_rate
+        total_profit = sum(returns)
+        total_bets = len(returns)
+        roi = total_profit / total_bets
+        hit_rate = wins / total_bets
+        return {'roi': roi, 'hit_rate': hit_rate,'total_bets': total_bets}
 
     def debug_probability_mapping(self, model, X, clean_data, n_games=10):
         print(f"\n  DEBUGGING PROBABILITY MAPPING")
