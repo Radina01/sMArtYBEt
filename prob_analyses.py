@@ -4,22 +4,21 @@ from sklearn.preprocessing import LabelEncoder
 
 
 class DataAnalyses:
-    def __init__(self,label_encoder):
+    def __init__(self, label_encoder):
         self.label_encoder = label_encoder
 
     def analyze_probability_calibration(self, model, X, y_encoded, clean_data):
-#Check if model probabilities are better calibrated than market
+        # Check if model probabilities are better calibrated than market
         print("\n" + "=" * 60)
         print("\nProbability Calibration Analysis:")
         print("\n" + "=" * 60)
 
         self.label_encoder.fit(clean_data['Result'])
-# Get model predictions
         model_proba = model.predict_proba(X)
         class_labels = self.label_encoder.classes_
         model_df = pd.DataFrame(model_proba, columns=class_labels, index=X.index)
 
-# Convert encoded y back to original labels
+        # Convert encoded y back to original labels
         y_original = self.label_encoder.inverse_transform(y_encoded)
 
         print(f"Label Mapping: {list(zip(range(len(class_labels)), class_labels))}")
@@ -33,7 +32,7 @@ class DataAnalyses:
             ('DRAW', 'D', 'Market_Prob_Draw', draw_idx),
             ('HOME', 'H', 'Market_Prob_Home', home_idx)
         ]
-        for outcome_name,outcome_label,market_prob_col,idx in outcomes:
+        for outcome_name, outcome_label, market_prob_col, idx in outcomes:
             print(f"\n {outcome_name} WIN Calibration:")
             print("   Prob Range  | Market Pred | Market Actual | Model Pred | Model Actual | Better")
             print("   " + "-" * 75)
@@ -46,12 +45,12 @@ class DataAnalyses:
             total_market_error = 0
             total_model_error = 0
 
-            for i in range(len(bins)-1):
-                low,high = bins[i], bins[i+1]
+            for i in range(len(bins) - 1):
+                low, high = bins[i], bins[i + 1]
 
                 market_mask = (clean_data[market_prob_col] >= low) & (clean_data[market_prob_col] <= high)
                 model_col = class_labels[idx]
-                model_mask = (model_df[model_col]>low) & (model_df[model_col]<high)
+                model_mask = (model_df[model_col] > low) & (model_df[model_col] < high)
 
                 if market_mask.sum() > 10 and model_mask.sum() > 10:
                     market_actual = (y_original[market_mask] == outcome_label).mean()
@@ -70,10 +69,11 @@ class DataAnalyses:
                     if abs(model_error - market_error) < 0.001:
                         better = "  TIE"
 
-                    print(f"   {low:.2f}-{high:.2f}   | {market_pred:.3f}     | {market_actual:.3f}       | {model_pred_val:.3f}     | {model_actual:.3f}      {better}")
+                    print(
+                        f"   {low:.2f}-{high:.2f}   | {market_pred:.3f}     | {market_actual:.3f}       | {model_pred_val:.3f}     | {model_actual:.3f}      {better}")
 
     def analyze_market_performance(self, clean_data):
-        print("\n"+"=" * 60)
+        print("\n" + "=" * 60)
         print("\n Market Performance Analysis:")
         print("\n" + "=" * 60)
 
@@ -82,7 +82,7 @@ class DataAnalyses:
         print(f"   Feature order: {market_features}")
         print(f"   Label encoding: {list(zip(self.label_encoder.classes_, range(len(self.label_encoder.classes_))))}")
 
-        market_probs= clean_data[market_features].values
+        market_probs = clean_data[market_features].values
         market_pred = market_probs.argmax(axis=1)
 
         market_pred_labels = self.label_encoder.inverse_transform(market_pred)
@@ -110,17 +110,16 @@ class DataAnalyses:
 
             print(
                 f"   Game {i}: Probs[A={probs[0]:.3f}, D={probs[1]:.3f}, H={probs[2]:.3f}] -> Pred: {pred_label}, Actual: {actual_result}")
-        self.analyze_draw_market_pred(market_probs,market_pred_labels)
+        self.analyze_draw_market_pred(market_probs, market_pred_labels)
 
-
-    def analyze_draw_market_pred(self,market_probs, market_pred_labels):
+    def analyze_draw_market_pred(self, market_probs, market_pred_labels):
         print(f"\nDraw Prediction Analysis:")
 
         total_games = len(market_pred_labels)
         draw_predictions = (market_pred_labels == 'D').sum()
         print(f"   Draw predictions: {draw_predictions}/{total_games} ({draw_predictions / total_games:.1%})")
 
-# Check if draw probabilities are generally low
+        # Check if draw probabilities are generally low
         draw_probs = market_probs[:, 1]  # Draw probabilities are at index 1
         avg_draw_prob = draw_probs.mean()
         max_draw_prob = draw_probs.max()
@@ -130,8 +129,7 @@ class DataAnalyses:
         print(f"   Games with draw prob > 0.4: {(draw_probs > 0.4).sum()}")
         print(f"   Games with draw prob > 0.5: {(draw_probs > 0.5).sum()}")
 
-
-    def diagnose_value_bet_increase(self, value_bets, model, X, clean_data):
+    def analyse_value_bet_increase(self, value_bets, model, X, clean_data):
         print(f"\n DIAGNOSING VALUE BET INCREASE")
         print("=" * 50)
 
@@ -141,19 +139,19 @@ class DataAnalyses:
         print(f"   Edges > 5%: {(value_bets['edge'] > 0.05).sum()}")
         print(f"   Edges > 10%: {(value_bets['edge'] > 0.10).sum()}")
 
-# Check if model is overconfident
+        # Check if model is overconfident
         model_proba = model.predict_proba(X)
         model_confidence = model_proba.max(axis=1)
         print(f"\nModel Confidence Analysis:")
         print(f"   Average max probability: {model_confidence.mean():.3f}")
         print(f"   % predictions > 70% confidence: {(model_confidence > 0.7).mean():.1%}")
 
-# Compare with market confidence
+        # Compare with market confidence
         market_probs = clean_data[['Market_Prob_Home', 'Market_Prob_Draw', 'Market_Prob_Away']].values
         market_confidence = market_probs.max(axis=1)
         print(f"   Market average confidence: {market_confidence.mean():.3f}")
 
-# Check where edges are coming from
+        # Check where edges are coming from
         if value_bets.empty:
             print("No value bets to analyze")
             return
@@ -161,7 +159,7 @@ class DataAnalyses:
         home_bets = value_bets[value_bets['bet_type'] == 'H']
         away_bets = value_bets[value_bets['bet_type'] == 'A']
         draw_bets = value_bets[value_bets['bet_type'] == 'D']
-# Check edge distribution
+        # Check edge distribution
         print(f"   HOME bets: {len(home_bets)} (avg edge: {home_bets['edge'].mean():.3f})")
         print(f"   AWAY bets: {len(away_bets)} (avg edge: {away_bets['edge'].mean():.3f})")
         print(f"   DRAW bets: {len(draw_bets)} (avg edge: {draw_bets['edge'].mean():.3f})")
@@ -171,109 +169,6 @@ class DataAnalyses:
             'market_confidence': market_confidence.mean(),
             'avg_edge': value_bets['edge'].mean()
         }
-
-# Find potential value bets where model disagrees with market
-
-    def find_value_bets(self, model_wrapper, X, clean_data, threshold=0.01):
-        print(f" Finding value bets")
-
-        model_proba = model_wrapper.predict_proba(X)
-
-        value_bets = []
-
-        for i, index in enumerate(X.index):
-            actual_result = clean_data.loc[index, 'Result']
-
-            market_probs = {
-                'A': clean_data.loc[index, 'Market_Prob_Away'],
-                'D': clean_data.loc[index, 'Market_Prob_Draw'],
-                'H': clean_data.loc[index, 'Market_Prob_Home']
-            }
-
-            model_probs_dict = {
-                'A': model_proba[i][0],
-                'D': model_proba[i][1],
-                'H': model_proba[i][2]
-            }
-
-            best_bet = None
-            best_edge = -1
-            for outcome in ['H', 'D', 'A']:
-                edge = model_probs_dict[outcome] - market_probs[outcome]
-
-                if edge > threshold and edge > best_edge:
-                    best_edge = edge
-                    best_bet = outcome
-
-            if best_bet is not None:
-                value_bets.append({
-                    'game_index': index,
-                    'home_team': clean_data.loc[index, 'HomeTeam'],
-                    'away_team': clean_data.loc[index, 'AwayTeam'],
-                    'bet_type': best_bet,
-                    'model_prob': model_probs_dict[best_bet],
-                    'market_prob': market_probs[best_bet],
-                    'edge': best_edge,
-                    'odds': clean_data.loc[index, f'B365{best_bet}'],
-                    'actual_result': actual_result,
-                    'correct': best_bet == actual_result  # For immediate validation
-                })
-
-                if i < 3:
-                    print(
-                        f"\nGame {i} - {clean_data.loc[index, 'HomeTeam']} vs {clean_data.loc[index, 'AwayTeam']}:")
-                    print(f"  Actual: {actual_result}")
-                    print(f"  Model:  A={model_probs_dict['A']:.3f}, D={model_probs_dict['D']:.3f}, H={model_probs_dict['H']:.3f}")
-                    print(f"  Market: A={market_probs['A']:.3f}, D={market_probs['D']:.3f}, H={market_probs['H']:.3f}")
-                    print(f"    VALUE BET: {outcome} (Edge: {edge:.3f})")
-
-        value_df = pd.DataFrame(value_bets)
-
-        if not value_df.empty:
-            print(f"\n  Found {len(value_df)} potential value bets")
-
-            correct_bets = value_df[value_df['correct'] == True]
-            hit_rate = len(correct_bets) / len(value_df)
-
-            print(f"   Correct bets: {len(correct_bets)}/{len(value_df)}")
-            print(f"   Hit rate: {hit_rate:.1%}")
-
-            print(f"\n  Sample value bets:")
-            for i, bet in enumerate(value_df.head(10).to_dict('records')):
-                won = " TRUE " if bet['correct'] else " FALSE "
-                print(f"   {won} {bet['home_team']} vs {bet['away_team']} - Bet {bet['bet_type']} "
-                      f"(Edge: {bet['edge']:.3f}, Actual: {bet['actual_result']})")
-        else:
-            print(" No value bets found")
-
-        return value_df
-
-    def calculate_roi(self, value_df):
-        print(f"\n  VALUE BET VALIDATION")
-        print("=" * 40)
-
-        if value_df.empty:
-            return {'roi': 0.0, 'hit_rate': 0.0, 'total_bets': 0}
-
-        returns = []
-        wins = 0
-
-        for _, row in value_df.iterrows():
-            odds = row['odds']
-            if pd.isna(odds) or odds <= 1:
-                returns.append(-1.0)
-                continue
-            if row['correct']:
-                returns.append(odds - 1.0)  # win profit
-                wins += 1
-            else:
-                returns.append(-1.0)
-
-        total_profit = sum(returns)
-        total_bets = len(returns)
-        roi = total_profit / total_bets
-        hit_rate = wins / total_bets
-        return {'roi': roi, 'hit_rate': hit_rate,'total_bets': total_bets}
 
     def debug_probability_mapping(self, model, X, clean_data, n_games=10):
         print(f"\n  DEBUGGING PROBABILITY MAPPING")
@@ -296,4 +191,3 @@ class DataAnalyses:
             print(f"  Model pred: {model_pred} (probs: {model_proba[i]})")
             print(f"  Market pred: {market_pred}")
             print(f"  Correct: {model_pred == actual_result}")
-

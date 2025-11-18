@@ -4,17 +4,14 @@ import pandas as pd
 import numpy as np
 
 
-
 class DataCollector:
-    def __init__(self,team_strength_calculator=None,quick_win = None):
+    def __init__(self, team_strength_calculator=None, quick_win=None):
         self.data = None
         self.clean_data = None
         self.team_strength_calculator = team_strength_calculator
         self.quick_win = quick_win
 
-
-
-    def get_epl_dataset(self): #"8 seasons of EPL with odds"#
+    def get_epl_dataset(self):  # "8 seasons of EPL with odds"#
 
         if os.path.exists('epl_data.csv'):
             self.data = pd.read_csv('epl_data.csv')
@@ -29,7 +26,7 @@ class DataCollector:
 
         all_data = []
 
-        for season_name,season_code in seasons.items():
+        for season_name, season_code in seasons.items():
             try:
                 url = f'https://www.football-data.co.uk/mmz4281/{season_code}/E0.csv'
                 df = pd.read_csv(url)
@@ -125,17 +122,15 @@ class DataCollector:
             self.clean_data['Date'] = pd.to_datetime(self.clean_data['Date'])
             return self.clean_data
         clean_df = self.data.copy()
-
-        # Check for different date formats by season
-
+        # DIVIDE METHODS
         columns = [
             'Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG',
             'B365H', 'B365D', 'B365A', 'HS', 'AS', 'HST', 'AST',
             'HC', 'AC', 'HF', 'AF', 'HY', 'AY', 'HR', 'AR', 'Season'
         ]
 
-        clean_df=clean_df[columns]
-        clean_df = clean_df.dropna(subset=['B365H', 'B365D', 'B365A','FTHG', 'FTAG','HS', 'AS'])
+        clean_df = clean_df[columns]
+        clean_df = clean_df.dropna(subset=['B365H', 'B365D', 'B365A', 'FTHG', 'FTAG', 'HS', 'AS'])
 
         clean_df['Date'] = self._parse_dates_robustly(clean_df)
 
@@ -145,19 +140,19 @@ class DataCollector:
             clean_df['FTHG'] == clean_df['FTAG'],
         ]
 
-        choices = ['H','A','D']
+        choices = ['H', 'A', 'D']
         clean_df['Result'] = np.select(conditions, choices, default='D')
         result_counts_before = clean_df['Result'].value_counts()
 
-#calculate the market probabilities and remove the vig
-        total_probs = (1/clean_df['B365H']) + (1/clean_df['B365D']) + (1/clean_df['B365A'])
+        # calculate the market probabilities and remove the vig
+        total_probs = (1 / clean_df['B365H']) + (1 / clean_df['B365D']) + (1 / clean_df['B365A'])
 
-        clean_df['Market_Prob_Home'] = (1/clean_df['B365H'])/total_probs
-        clean_df['Market_Prob_Away'] = (1/clean_df['B365A'])/total_probs
-        clean_df['Market_Prob_Draw'] = (1/clean_df['B365D'])/total_probs
+        clean_df['Market_Prob_Home'] = (1 / clean_df['B365H']) / total_probs
+        clean_df['Market_Prob_Away'] = (1 / clean_df['B365A']) / total_probs
+        clean_df['Market_Prob_Draw'] = (1 / clean_df['B365D']) / total_probs
 
         stat_col = ['HST', 'AST',
-            'HC', 'AC', 'HF', 'AF', 'HY', 'AY', 'HR', 'AR']
+                    'HC', 'AC', 'HF', 'AF', 'HY', 'AY', 'HR', 'AR']
 
         for col in stat_col:
             if col in clean_df.columns:
@@ -170,7 +165,7 @@ class DataCollector:
 
         if self.team_strength_calculator:
 
-            clean_df = self.team_strength_calculator.create_team_strength_features(clean_df,window = 10)
+            clean_df = self.team_strength_calculator.create_team_strength_features(clean_df, window=10)
             print(f"Added team strength features. Total columns: {len(clean_df.columns)}")
         else:
             print("No team strength calculator provided - using basic features only")
@@ -185,7 +180,3 @@ class DataCollector:
         self.clean_data.to_csv('epl_clean_data.csv', index=False)
 
         return clean_df
-
-
-
-
