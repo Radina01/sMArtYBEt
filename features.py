@@ -26,6 +26,8 @@ class PrepareFeatures:
         y_encoded = self.label_encoder.fit_transform(y)
         # Verify encoding works
         print(f"Features: {len(feature_columns)} columns")
+        for feature in feature_columns:
+            print(feature + "\n")
         print(f"Label encoding: {list(zip(self.label_encoder.classes_, range(len(self.label_encoder.classes_))))}")
 
         return x, y_encoded, feature_columns
@@ -168,7 +170,7 @@ class PrepareFeatures:
         df['Away_Disadvantage_x_Form'] = df['Away_Form'] * 0.8
 
         df['Points_Difference'] = df['Home_Avg_Points'] - df['Away_Avg_Points']
-        df['Is_Strong_vs_Weak'] = (df['Points_Difference'] > 1.0).astype(int)  # Big strength gap
+        df['Is_Strong_vs_Weak'] = (df['Points_Difference'] > 1.0).astype(int)
         df['Is_Even_Contest'] = ((df['Points_Difference'] >= -0.5) & (df['Points_Difference'] <= 0.5)).astype(int)
 
         df['Home_Goal_Difference'] = df['Home_Avg_Goals_For'] - df['Home_Avg_Goals_Against']

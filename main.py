@@ -199,6 +199,7 @@ def main():
     analyses = DataAnalyses(prepare_features.label_encoder)
     analyses.analyze_market_performance(clean_data)
 
+
     plot_ev_vs_profit(bets_with_stakes)
     plot_bankroll_over_time(equity_fixed, equity_kelly)
     plot_edge_distribution(value_bets_df)
