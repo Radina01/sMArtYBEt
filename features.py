@@ -37,7 +37,6 @@ class PrepareFeatures:
         history = df[
             (df['Date'] < current_date) &
             (df['HomeTeam'] == team) | (df['AwayTeam'] == team)].tail(window)
-        print(f"   game_history: Found {len(history)} matches before {current_date}")
         return history
 
     def calculate_historical_performance(self, history, team):

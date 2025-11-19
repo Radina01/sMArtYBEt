@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
 
 
 class DataAnalyses:
@@ -8,7 +7,6 @@ class DataAnalyses:
         self.label_encoder = label_encoder
 
     def analyze_probability_calibration(self, model, X, y_encoded, clean_data):
-        # Check if model probabilities are better calibrated than market
         print("\n" + "=" * 60)
         print("\nProbability Calibration Analysis:")
         print("\n" + "=" * 60)
@@ -112,7 +110,7 @@ class DataAnalyses:
                 f"   Game {i}: Probs[A={probs[0]:.3f}, D={probs[1]:.3f}, H={probs[2]:.3f}] -> Pred: {pred_label}, Actual: {actual_result}")
         self.analyze_draw_market_pred(market_probs, market_pred_labels)
 
-    def analyze_draw_market_pred(self, market_probs, market_pred_labels):
+    def analyze_draw_market_pred(self,market_probs, market_pred_labels):
         print(f"\nDraw Prediction Analysis:")
 
         total_games = len(market_pred_labels)

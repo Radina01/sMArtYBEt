@@ -1,4 +1,5 @@
 import os
+import re
 
 import pandas as pd
 import numpy as np
@@ -11,7 +12,7 @@ class DataCollector:
         self.team_strength_calculator = team_strength_calculator
         self.quick_win = quick_win
 
-    def get_epl_dataset(self):  # "8 seasons of EPL with odds"#
+    def get_epl_dataset(self):
 
         if os.path.exists('epl_data.csv'):
             self.data = pd.read_csv('epl_data.csv')
@@ -68,14 +69,12 @@ class DataCollector:
                 if pd.isna(date_str):
                     return pd.NaT
 
-                # Try to handle various separators and formats
                 date_str = str(date_str).strip()
 
-                # Common patterns in football-data.co.uk
                 patterns = [
-                    r'(\d{1,2})/(\d{1,2})/(\d{4})',  # dd/mm/yyyy
-                    r'(\d{1,2})/(\d{1,2})/(\d{2})',  # dd/mm/yy
-                    r'(\d{4})-(\d{1,2})-(\d{1,2})',  # yyyy-mm-dd
+                    r'(\d{1,2})/(\d{1,2})/(\d{4})',
+                    r'(\d{1,2})/(\d{1,2})/(\d{2})',
+                    r'(\d{4})-(\d{1,2})-(\d{1,2})',
                 ]
 
                 for pattern in patterns:
@@ -84,9 +83,9 @@ class DataCollector:
                         groups = match.groups()
                         if len(groups) == 3:
                             try:
-                                if len(groups[2]) == 4:  # yyyy
+                                if len(groups[2]) == 4:
                                     return pd.Timestamp(int(groups[2]), int(groups[1]), int(groups[0]))
-                                else:  # yy
+                                else:
                                     year = int(groups[2])
                                     year = year + 2000 if year < 100 else year
                                     return pd.Timestamp(year, int(groups[1]), int(groups[0]))
@@ -121,62 +120,71 @@ class DataCollector:
             print("Cleaned data file exists")
             self.clean_data['Date'] = pd.to_datetime(self.clean_data['Date'])
             return self.clean_data
-        clean_df = self.data.copy()
-        # DIVIDE METHODS
+        clean_df = self.clean_raw_data()
+        clean_df = self.add_features(clean_df)
+
+        self.clean_data = clean_df
+        self.clean_data.to_csv('epl_clean_data.csv', index=False)
+
+        return clean_df
+
+    def clean_raw_data(self):
+        df = self.data.copy()
         columns = [
             'Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG',
             'B365H', 'B365D', 'B365A', 'HS', 'AS', 'HST', 'AST',
             'HC', 'AC', 'HF', 'AF', 'HY', 'AY', 'HR', 'AR', 'Season'
         ]
 
-        clean_df = clean_df[columns]
-        clean_df = clean_df.dropna(subset=['B365H', 'B365D', 'B365A', 'FTHG', 'FTAG', 'HS', 'AS'])
-
-        clean_df['Date'] = self._parse_dates_robustly(clean_df)
-
-        conditions = [
-            clean_df['FTHG'] > clean_df['FTAG'],
-            clean_df['FTHG'] < clean_df['FTAG'],
-            clean_df['FTHG'] == clean_df['FTAG'],
-        ]
-
-        choices = ['H', 'A', 'D']
-        clean_df['Result'] = np.select(conditions, choices, default='D')
-        result_counts_before = clean_df['Result'].value_counts()
-
-        # calculate the market probabilities and remove the vig
-        total_probs = (1 / clean_df['B365H']) + (1 / clean_df['B365D']) + (1 / clean_df['B365A'])
-
-        clean_df['Market_Prob_Home'] = (1 / clean_df['B365H']) / total_probs
-        clean_df['Market_Prob_Away'] = (1 / clean_df['B365A']) / total_probs
-        clean_df['Market_Prob_Draw'] = (1 / clean_df['B365D']) / total_probs
+        df = df[columns]
+        df = df.dropna(subset=['B365H', 'B365D', 'B365A', 'FTHG', 'FTAG', 'HS', 'AS'])
 
         stat_col = ['HST', 'AST',
                     'HC', 'AC', 'HF', 'AF', 'HY', 'AY', 'HR', 'AR']
 
         for col in stat_col:
-            if col in clean_df.columns:
-                clean_df[col] = clean_df[col].fillna(0)
+            if col in df.columns:
+                df[col] = df[col].fillna(0)
 
-        clean_df['Total_Goals'] = clean_df['FTHG'] + clean_df['FTAG']
-        clean_df['Goal_Difference'] = clean_df['FTHG'] - clean_df['FTAG']
-        clean_df['Total_Shots'] = clean_df['HS'] + clean_df['AS']
-        clean_df['Shot_Ratio'] = clean_df['HS'] / (clean_df['HS'] + clean_df['AS'])
+        return df
+
+    def add_market_prob_features(self, df):
+        total_probs = (1 / df['B365H']) + (1 / df['B365D']) + (1 / df['B365A'])
+
+        df['Market_Prob_Home'] = (1 / df['B365H']) / total_probs
+        df['Market_Prob_Away'] = (1 / df['B365A']) / total_probs
+        df['Market_Prob_Draw'] = (1 / df['B365D']) / total_probs
+        return df
+
+    def add_features(self, df):
+        df['Total_Goals'] = df['FTHG'] + df['FTAG']
+        df['Goal_Difference'] = df['FTHG'] - df['FTAG']
+        df['Total_Shots'] = df['HS'] + df['AS']
+        df['Shot_Ratio'] = df['HS'] / (df['HS'] + df['AS'])
+
+        df = self.add_market_prob_features(df)
+        df['Date'] = self._parse_dates_robustly(df)
+
+        conditions = [
+            df['FTHG'] > df['FTAG'],
+            df['FTHG'] < df['FTAG'],
+            df['FTHG'] == df['FTAG'],
+        ]
+
+        choices = ['H', 'A', 'D']
+        df['Result'] = np.select(conditions, choices, default='D')
 
         if self.team_strength_calculator:
 
-            clean_df = self.team_strength_calculator.create_team_strength_features(clean_df, window=10)
-            print(f"Added team strength features. Total columns: {len(clean_df.columns)}")
+            df = self.team_strength_calculator.create_team_strength_features(df, window=10)
+            print(f"Added team strength features. Total columns: {len(df.columns)}")
         else:
             print("No team strength calculator provided - using basic features only")
 
         if self.quick_win:
-            clean_df = self.quick_win.create_quick_win_features(clean_df)
-            print(f"Added quick win features. Total columns: {len(clean_df.columns)}")
+            df = self.quick_win.create_quick_win_features(df)
+            print(f"Added quick win features. Total columns: {len(df.columns)}")
         else:
             print("No quick win provided - using basic features only")
 
-        self.clean_data = clean_df
-        self.clean_data.to_csv('epl_clean_data.csv', index=False)
-
-        return clean_df
+        return df

@@ -1,7 +1,5 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
-
 
 class ValueBetsAnalyses:
     def __init__(self, model_wrapper, X_test, clean_data, bankroll=10000):

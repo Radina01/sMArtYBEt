@@ -7,6 +7,8 @@ from sklearn.model_selection import train_test_split
 
 from bets_analyses import ValueBetsAnalyses
 from data_collector import DataCollector
+from diagrams import plot_ev_vs_profit, plot_bankroll_over_time, plot_edge_distribution, plot_calibration_curve, \
+    plot_bootstrap_roi_distribution
 from model import ModelTrainer
 from prob_analyses import DataAnalyses
 from features import PrepareFeatures
@@ -14,6 +16,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import joblib
+
+prepare_features = PrepareFeatures()
+coll = DataCollector(team_strength_calculator=prepare_features, quick_win=prepare_features)
+coll.get_epl_dataset()
+clean_data = coll.clean_dataset()
+model = ModelTrainer(prepare_features.label_encoder)
 
 
 def print_simulation_report(bets_analysis, equity_fixed, equity_kelly, bets_with_stakes, roi_results):
@@ -61,133 +69,7 @@ def print_simulation_report(bets_analysis, equity_fixed, equity_kelly, bets_with
     print("=" * 60)
 
 
-# PUT PLOT IN ANOTHER FILE
-def plot_bankroll_max_drawdown_chart():
-    folds = [1, 3, 5]
-    final_bankroll_fixed = [20850, 1275, 14648]
-    final_bankroll_kelly = [14934, 25288, 22980]
-    max_drawdown_fixed = [0.082, 0.061, 0.041]
-    max_drawdown_kelly = [0.205, 0.143, 0.097]
-    sharpe_fixed = [3.09, 2.22, 5.2]
-    sharpe_kelly = [2.63, 6.09, 5.73]
-
-    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
-
-    width = 0.25
-    x = np.arange(len(folds))
-    ax[0].bar(x - width / 2, final_bankroll_fixed, width, label='Fixed Stake')
-    ax[0].bar(x + width / 2, final_bankroll_kelly, width, label='Kelly')
-    ax[0].set_xticks(x)
-    ax[0].set_xticklabels(folds)
-    ax[0].set_xlabel("Number of Folds")
-    ax[0].set_ylabel("Final Bankroll ($)")
-    ax[0].set_title("Bankroll vs Folds")
-    ax[0].legend()
-
-    ax[1].plot(folds, np.array(max_drawdown_fixed) * 100, marker='o', label='Fixed Stake')
-    ax[1].plot(folds, np.array(max_drawdown_kelly) * 100, marker='o', label='Kelly')
-    ax[1].set_xlabel("Number of Folds")
-    ax[1].set_ylabel("Max Drawdown (%)")
-    ax[1].set_title("Drawdown vs Folds")
-    ax[1].legend()
-
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_bankroll_over_time(equity_fixed, equity_kelly):
-    plt.figure(figsize=(10, 5))
-    plt.plot(equity_fixed, label="Fixed Stake")
-    plt.plot(equity_kelly, label="Kelly Fractional")
-
-    plt.xlabel("Bet Number")
-    plt.ylabel("Bankroll")
-    plt.title("Bankroll Over Time")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_edge_distribution(value_bets_df):
-    edges = value_bets_df["edge"]
-
-    plt.figure(figsize=(10, 5))
-    plt.hist(edges, bins=30)
-
-    plt.xlabel("Edge (%)")
-    plt.ylabel("Frequency")
-    plt.title("Distribution of Value Bet Edges")
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_calibration_curve(calibrated_model, X_cal, y_cal, label_names=None):
-    probs = calibrated_model.predict_proba(X_cal)
-    num_classes = probs.shape[1]
-
-    if label_names is None:
-        label_names = [f"Class {i}" for i in range(num_classes)]
-
-    plt.figure(figsize=(10, 5))
-
-    for c in range(num_classes):
-        true_y = (y_cal == c).astype(int)
-        prob_true, prob_pred = calibration_curve(true_y, probs[:, c], n_bins=10)
-
-        plt.plot(prob_pred, prob_true, marker='o', label=f"{label_names[c]}")
-
-    plt.plot([0, 1], [0, 1], linestyle='--')
-
-    plt.xlabel("Predicted Probability")
-    plt.ylabel("Observed Frequency")
-    plt.title("Calibration Plot")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_ev_vs_profit(bets_df):
-    ev = bets_df['model_prob'] * (bets_df['odds'] - 1) * bets_df['stake']
-    realized = bets_df['profit']
-
-    plt.figure(figsize=(8, 6))
-    colors = ['green' if c else 'red' for c in bets_df['correct']]
-    plt.scatter(ev, realized, c=colors, alpha=0.6, s=bets_df['stake'] * 0.5)
-    plt.plot([0, max(ev.max(), realized.max())],
-             [0, max(ev.max(), realized.max())],
-             linestyle='--', color='black', label='y = x')
-    plt.xlabel("Expected Value ($)")
-    plt.ylabel("Realized Profit ($)")
-    plt.title("Expected Value vs Realized Profit")
-    plt.legend(["y = x", "Wins (green) / Losses (red)"])
-    plt.grid(True)
-    plt.show()
-
-
-def plot_bootstrap_roi_distribution(roi_results):
-    avg_roi, ci_low, ci_high, roi_samples = roi_results
-
-    plt.figure(figsize=(10, 6))
-    plt.hist(roi_samples, bins=40, alpha=0.7)
-    plt.axvline(avg_roi, linestyle="--", label=f"Average ROI = {avg_roi:.2%}")
-    plt.axvline(ci_low, color="red", linestyle="--", label=f"Lower 95% CI = {ci_low:.2%}")
-    plt.axvline(ci_high, color="green", linestyle="--", label=f"Upper 95% CI = {ci_high:.2%}")
-
-    plt.title("Bootstrap ROI Distribution")
-    plt.xlabel("ROI")
-    plt.ylabel("Frequency")
-    plt.legend()
-    plt.show()
-
-
-def main():
-    prepare_features = PrepareFeatures()
-    coll = DataCollector(team_strength_calculator=prepare_features, quick_win=prepare_features)
-    coll.get_epl_dataset()
-    clean_data = coll.clean_dataset()
-
-    model = ModelTrainer(prepare_features.label_encoder)
-
+def run_pipelines():
     X, y, feature_columns = prepare_features.prepare_features(clean_data)
     clean_data['y'] = y
 
@@ -196,8 +78,11 @@ def main():
 
     model.create_models()
 
-    avg_accuracies = model.train_and_evaluate(X_no_market, y)
-    print("Average Accuracy per model:", avg_accuracies)
+    model.train_and_evaluate(X_no_market, y)
+    print("Average Accuracy per model:")
+    for model_name, acc in model.results.items():
+        print(f"{model_name}: {acc:.2f}")
+
 
     best_model_name = max(model.results, key=model.results.get)
     best_model = model.models[best_model_name]
@@ -214,7 +99,10 @@ def main():
 
     test_indexed = clean_data.iloc[X_test_last.index[0]: X_test_last.index[-1] + 1].copy()
     test_indexed.index = X_test_no_market_df.index
+    return calibrated_model, X_test_no_market_df, test_indexed, X_test_last, y_test_last
 
+
+def bets_simulations(calibrated_model, X_test_no_market_df, test_indexed):
     bets_analysis = ValueBetsAnalyses(calibrated_model, X_test_no_market_df, test_indexed)
     value_bets_df = bets_analysis.find_value_bets()
 
@@ -233,43 +121,13 @@ def main():
         seed=42
     )
     print_simulation_report(bets_analysis, equity_fixed, equity_kelly, bets_with_stakes, roi_results)
-
-    home_strength = prepare_features.get_current_strength("Man United", test_indexed)
-    away_strength = prepare_features.get_current_strength("Everton", test_indexed)
-
-    prediction = model.predict_match(
-        calibrated_model,
-        "Man United", "Everton",
-        1.85, 3.80, 4.20,
-        home_strength, away_strength,
-        X_test_no_market_df
-    )
-
-    print(f"\n PREDICTION RESULT:")
-    print(f"Match: {prediction['match']}")
-    print(f"Predicted: {prediction['predicted_result']}")
-    print(f"Confidence: {prediction['confidence']:.1%}")
-    print(f"Model Probabilities - H: {prediction['probabilities']['Home']:.1%}, "
-          f"D: {prediction['probabilities']['Draw']:.1%}, "
-          f"A: {prediction['probabilities']['Away']:.1%}")
-    print(f"Market Probabilities - H: {prediction['market_probs']['Home']:.1%},"
-          f"D: {prediction['market_probs']['Draw']:.1%},"
-          f"A: {prediction['market_probs']['Away']:.1%} ")
-    print(f"Edges (Model - Market)- H: {prediction['edges']['Home']:.1%},"
-          f"D: {prediction['edges']['Draw']:.1%},"
-          f"A: {prediction['edges']['Away']:.1%}")
-    print(f"Edge: {prediction['best_edge']:.1%}")
-    print(f"Best Value Bet: {prediction['best_value_bet']}")
-
-    plot_ev_vs_profit(bets_with_stakes)
-    plot_bankroll_over_time(equity_fixed, equity_kelly)
-    plot_edge_distribution(value_bets_df)
-    plot_calibration_curve(calibrated_model, X_test_last, y_test_last, ["Home", "Draw", "Away"])
-    plot_bootstrap_roi_distribution(roi_results)
+    return equity_fixed, equity_kelly, bets_with_stakes, roi_results, value_bets_df
 
     # (0.5445614035087718) 5
     # (0.5364522417153996) 3
     # (0.52046783625731) 1
+
+    # MAKE SUMMARY, PRINT COMPARISON, ALL MARKET ANALYSES, MAKE ACCURACY BY FOLDS COMPARISON
 
 
 #  trainer = ModelTrainer(prepare_features.label_encoder)
@@ -301,15 +159,52 @@ def main():
 #      trainer.check_for_leakage(clean_data, features)
 
 
-#     # Summary
-# print("\n" + "=" * 60)
-# print(" FINAL RESULTS")
-# print("=" * 60)
-# print(f"   Baseline (Market) Accuracy: {trainer.results['Baseline_Market']['accuracy']:.3f}")
-# print(f"   Best Model Accuracy: {trainer.results[best_model_name]['accuracy']:.3f}")
-# print(
-#     f"   Improvement: {(trainer.results[best_model_name]['accuracy'] / trainer.results['Baseline_Market']['accuracy'] - 1) * 100:.1f}%")
-# print(f"   Value Bets Found: {len(value_bets)}")
+def make_bet(calibrated_model, X_test_no_market_df, test_indexed):
+    home_strength = prepare_features.get_current_strength("Man United", test_indexed)
+    away_strength = prepare_features.get_current_strength("Everton", test_indexed)
+
+    prediction = model.predict_match(
+        calibrated_model,
+        "Man United", "Everton",
+        1.85, 3.80, 4.20,
+        home_strength, away_strength,
+        X_test_no_market_df
+    )
+
+    print(f"\n PREDICTION RESULT:")
+    print(f"Match: {prediction['match']}")
+    print(f"Predicted: {prediction['predicted_result']}")
+    print(f"Confidence: {prediction['confidence']:.1%}")
+    print(f"Model Probabilities - H: {prediction['probabilities']['Home']:.1%}, "
+          f"D: {prediction['probabilities']['Draw']:.1%}, "
+          f"A: {prediction['probabilities']['Away']:.1%}")
+    print(f"Market Probabilities - H: {prediction['market_probs']['Home']:.1%},"
+          f"D: {prediction['market_probs']['Draw']:.1%},"
+          f"A: {prediction['market_probs']['Away']:.1%} ")
+    print(f"Edges (Model - Market)- H: {prediction['edges']['Home']:.1%},"
+          f"D: {prediction['edges']['Draw']:.1%},"
+          f"A: {prediction['edges']['Away']:.1%}")
+    print(f"Edge: {prediction['best_edge']:.1%}")
+    print(f"Best Value Bet: {prediction['best_value_bet']}")
+
+
+def main():
+    calibrated_model, X_test_no_market_df, test_indexed, X_test_last, y_test_last = run_pipelines()
+    equity_fixed, equity_kelly, bets_with_stakes, roi_results, value_bets_df = bets_simulations(calibrated_model,
+                                                                                                X_test_no_market_df,
+                                                                                                test_indexed)
+
+    make_bet(calibrated_model, X_test_no_market_df, test_indexed)
+
+    analyses = DataAnalyses(prepare_features.label_encoder)
+    analyses.analyze_market_performance(clean_data)
+
+    plot_ev_vs_profit(bets_with_stakes)
+    plot_bankroll_over_time(equity_fixed, equity_kelly)
+    plot_edge_distribution(value_bets_df)
+    plot_calibration_curve(calibrated_model, X_test_last, y_test_last, ["Home", "Draw", "Away"])
+    plot_bootstrap_roi_distribution(roi_results)
+
 
 if __name__ == "__main__":
     main()

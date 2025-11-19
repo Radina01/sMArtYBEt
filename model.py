@@ -117,10 +117,10 @@ class ModelTrainer:
                 acc = accuracy_score(y_test, preds)
                 fold_accuracies.append(acc)
 
-            # Store average accuracy
-            self.results[model_name] = np.mean(fold_accuracies)
+            avg_acc = np.mean(fold_accuracies)
 
-        return self.results
+            self.results[model_name] = avg_acc
+
 
     # Check if any features strongly correlate with the result
     def check_for_leakage(self, clean_data, feature_columns):
