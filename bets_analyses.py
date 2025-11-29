@@ -7,7 +7,7 @@ class ValueBetsAnalyses:
         self.X_test = X_test
         self.clean_data = clean_data
         self.bankroll = bankroll
-
+#rename file and class
     def find_value_bets(self, threshold=0.10):
         model_probs = self.model.predict_proba(self.X_test)  # shape: (n_games, 3)
         market_probs = self.clean_data[['Market_Prob_Away', 'Market_Prob_Draw', 'Market_Prob_Home']].values
@@ -80,8 +80,8 @@ class ValueBetsAnalyses:
         returns = np.diff(equity) / equity[:-1]
         if len(returns) < 2:
             return np.nan
-        mean_r = np.mean(returns)
-        std_r = np.std(returns, ddof=1)
+        mean_r = np.mean(returns) #average return per period
+        std_r = np.std(returns, ddof=1) #standard deviation of returns
         if std_r == 0:
             return np.nan
         return (mean_r - risk_free_rate / periods_per_year) / std_r * np.sqrt(periods_per_year)

@@ -81,7 +81,6 @@ class ModelTrainer:
         return calibrated
 
     def time_series_train_test_split(self, X, y, n_splits=5, date_col='Date'):
-        # If X is a DataFrame and has a date column, sort by it
         if not isinstance(y, pd.Series):
             y = pd.Series(y)
         if date_col in X.columns:
