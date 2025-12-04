@@ -61,8 +61,6 @@ def make_bet(model, prepare_features, calibrated_model, X_test_last, test_indexe
 
 
 def main():
-    # model.create_baseline_model(X,y)
-    # check_for_leakage(clean_data, feature_columns)
     if os.path.exists(CALIBRATED_MODEL_PATH):
         (model, calibrated_model, prepare_features,
          X_test_last, y_test_last,
